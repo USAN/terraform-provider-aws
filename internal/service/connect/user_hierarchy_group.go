@@ -17,7 +17,6 @@ import (
 )
 
 func ResourceUserHierarchyGroup() *schema.Resource {
-	log.Printf("[KEEGAN] userHierarchyGroup.go")
 	return &schema.Resource{
 		CreateContext: resourceUserHierarchyGroupCreate,
 		ReadContext:   resourceUserHierarchyGroupRead,
@@ -95,14 +94,14 @@ func resourceUserHierarchyGroupRead(ctx context.Context, d *schema.ResourceData,
 	defaultTagsConfig := meta.(*conns.AWSClient).DefaultTagsConfig
 	ignoreTagsConfig := meta.(*conns.AWSClient).IgnoreTagsConfig
 
-	instanceID, HierarchyGroupId, err := UserHierarchyGroupParseId(d.Id())
+	instanceID, hierarchyGroupId, err := UserHierarchyGroupParseId(d.Id())
 
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
 	resp, err := conn.DescribeUserHierarchyGroupWithContext(ctx, &connect.DescribeUserHierarchyGroupInput{
-		HierarchyGroupId: aws.String(HierarchyGroupId),
+		HierarchyGroupId: aws.String(hierarchyGroupId),
 		InstanceId:       aws.String(instanceID),
 	})
 
@@ -143,15 +142,15 @@ func resourceUserHierarchyGroupRead(ctx context.Context, d *schema.ResourceData,
 func resourceUserHierarchyGroupUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	conn := meta.(*conns.AWSClient).ConnectConn
 
-	InstanceId, HierarchyGroupId, err := UserHierarchyGroupParseId(d.Id())
+	instanceId, hierarchyGroupId, err := UserHierarchyGroupParseId(d.Id())
 
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
 	input := &connect.UpdateUserHierarchyGroupNameInput{
-		HierarchyGroupId: aws.String(HierarchyGroupId),
-		InstanceId:       aws.String(InstanceId),
+		HierarchyGroupId: aws.String(hierarchyGroupId),
+		InstanceId:       aws.String(instanceId),
 		Name:             aws.String(d.Get("name").(string)),
 	}
 
@@ -174,14 +173,14 @@ func resourceUserHierarchyGroupUpdate(ctx context.Context, d *schema.ResourceDat
 func resourceUserHierarchyGroupDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	conn := meta.(*conns.AWSClient).ConnectConn
 
-	instanceID, HierarchyGroupId, err := UserHierarchyGroupParseId(d.Id())
+	instanceID, hierarchyGroupId, err := UserHierarchyGroupParseId(d.Id())
 	
 		if err != nil {
 			return diag.FromErr(err)
 		}
 	
 		_, err = conn.DeleteUserHierarchyGroupWithContext(ctx, &connect.DeleteUserHierarchyGroupInput{
-			HierarchyGroupId: aws.String(HierarchyGroupId),
+			HierarchyGroupId: aws.String(hierarchyGroupId),
 			InstanceId:    aws.String(instanceID),
 		})
 	
@@ -192,12 +191,11 @@ func resourceUserHierarchyGroupDelete(ctx context.Context, d *schema.ResourceDat
 	return nil
 }
 
-
 func UserHierarchyGroupParseId(id string) (string, string, error) {
 	parts := strings.SplitN(id, ":", 2)
 
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("unexpected format of ID (%s), expected instanceID:HierarchyGroupId", id)
+		return "", "", fmt.Errorf("unexpected format of ID (%s), expected instanceID:hierarchyGroupId", id)
 	}
 
 	return parts[0], parts[1], nil

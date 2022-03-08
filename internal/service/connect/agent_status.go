@@ -22,7 +22,9 @@ func ResourceAgentStatus() *schema.Resource {
 		CreateContext: resourceAgentStatusCreate,
 		ReadContext:   resourceAgentStatusRead,
 		UpdateContext: resourceAgentStatusUpdate,
-		DeleteContext: resourceAgentStatusDelete,
+		// Agent Status does not support deletion today. NoOp the Delete method.
+		// Users can rename their Agent Status manually if they want.
+		DeleteContext: schema.NoopContext,
 		Importer: &schema.ResourceImporter{
 			StateContext: schema.ImportStatePassthroughContext,
 		},
@@ -128,9 +130,6 @@ func resourceAgentStatusRead(ctx context.Context, d *schema.ResourceData, meta i
 		return diag.FromErr(fmt.Errorf("error getting Connect Agent Status (%s): empty response", d.Id()))
 	}
 
-	//if err := d.Set("config", flattenAgentStatus(resp.AgentStatus.Config)); err != nil {
-	//	return diag.FromErr(err)
-	//}
 
 	d.Set("arn", resp.AgentStatus.AgentStatusARN)
 	d.Set("agent_status_arn", resp.AgentStatus.AgentStatusARN) // Deprecated
@@ -169,11 +168,6 @@ func resourceAgentStatusUpdate(ctx context.Context, d *schema.ResourceData, meta
 		InstanceId:    aws.String(instanceID),
 	}
 
-	//if d.HasChange("config") {
-	//	config := expandAgentStatus(d.Get("config").(*schema.Set).List())
-	//	input.Config = config
-	//}
-
 	if d.HasChange("name") {
 		input.Name = aws.String(d.Get("name").(string))
 	}
@@ -205,58 +199,6 @@ func resourceAgentStatusUpdate(ctx context.Context, d *schema.ResourceData, meta
 
 	return resourceAgentStatusRead(ctx, d, meta)
 }
-
-func resourceAgentStatusDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	//conn := meta.(*conns.AWSClient).ConnectConn
-
-	//instanceID, agentStatusID, err := AgentStatusParseID(d.Id())
-	//
-	//	if err != nil {
-	//		return diag.FromErr(err)
-	//	}
-	//
-	//	_, err = conn.DeleteAgentStatusWithContext(ctx, &connect.DeleteAgentStatusInput{
-	//		AgentStatusId: aws.String(agentStatusID),
-	//		InstanceId:    aws.String(instanceID),
-	//	})
-	//
-	//	if err != nil {
-	//		return diag.FromErr(fmt.Errorf("error deleting AgentStatus (%s): %w", d.Id(), err))
-	//	}
-	//
-	return nil
-}
-
-//func expandAgentStatus(configs []interface{}) []*connect.AgentStatusConfig {
-//	if len(configs) == 0 {
-//		return nil
-//	}
-//
-//	agentStatusConfigs := []*connect.AgentStatusConfig{}
-//	for _, config := range configs {
-//		data := config.(map[string]interface{})
-//		agentStatusConfig := &connect.AgentStatusConfig{
-//			Name:  aws.String(data["name"].(string)),
-//			State: aws.String(data["state"].(string)),
-//		}
-//
-//		agentStatusConfigs = append(agentStatusConfigs, agentStatusConfig)
-//	}
-//
-//	return agentStatusConfigs
-//}
-
-//func flattenAgentStatus(configs []*connect.AgentStatusConfig) []interface{} {
-//	configsList := []interface{}{}
-//	for _, config := range configs {
-//		values := map[string]interface{}{}
-//		values["name"] = aws.StringValue(config.Name)
-//		values["state"] = aws.StringValue(config.State)
-//
-//		configsList = append(configsList, values)
-//	}
-//	return configsList
-//}
 
 func AgentStatusParseID(id string) (string, string, error) {
 	parts := strings.SplitN(id, ":", 2)

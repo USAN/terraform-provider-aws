@@ -58,14 +58,14 @@ func resourceUserHierarchyGroupCreate(ctx context.Context, d *schema.ResourceDat
 	defaultTagsConfig := meta.(*conns.AWSClient).DefaultTagsConfig
 	tags := defaultTagsConfig.MergeTags(tftags.New(d.Get("tags").(map[string]interface{})))
 
-	instanceID := d.Get("instance_id").(string)
+	instanceId := d.Get("instance_id").(string)
 	name := d.Get("name").(string)
 
 	input := &connect.CreateUserHierarchyGroupInput{
-		InstanceId: aws.String(instanceID),
+		InstanceId: aws.String(instanceId),
 		Name:       aws.String(name),
 	}
-	if v, ok := d.GetOk("parent_group_id"); ok && v.(*schema.Set).Len() > 0 {
+	if v, ok := d.GetOk("parent_group_id"); ok {
 		input.ParentGroupId = aws.String(v.(string))
 	}
 
@@ -84,7 +84,7 @@ func resourceUserHierarchyGroupCreate(ctx context.Context, d *schema.ResourceDat
 		return diag.FromErr(fmt.Errorf("error creating Connect User Hierarchy Group (%s): empty output", name))
 	}
 
-	d.SetId(fmt.Sprintf("%s:%s", instanceID, aws.StringValue(output.HierarchyGroupId)))
+	d.SetId(fmt.Sprintf("%s:%s", instanceId, aws.StringValue(output.HierarchyGroupId)))
 
 	return resourceUserHierarchyGroupRead(ctx, d, meta)
 }
@@ -94,7 +94,7 @@ func resourceUserHierarchyGroupRead(ctx context.Context, d *schema.ResourceData,
 	defaultTagsConfig := meta.(*conns.AWSClient).DefaultTagsConfig
 	ignoreTagsConfig := meta.(*conns.AWSClient).IgnoreTagsConfig
 
-	instanceID, hierarchyGroupId, err := UserHierarchyGroupParseId(d.Id())
+	instanceId, hierarchyGroupId, err := UserHierarchyGroupParseId(d.Id())
 
 	if err != nil {
 		return diag.FromErr(err)
@@ -102,7 +102,7 @@ func resourceUserHierarchyGroupRead(ctx context.Context, d *schema.ResourceData,
 
 	resp, err := conn.DescribeUserHierarchyGroupWithContext(ctx, &connect.DescribeUserHierarchyGroupInput{
 		HierarchyGroupId: aws.String(hierarchyGroupId),
-		InstanceId:       aws.String(instanceID),
+		InstanceId:       aws.String(instanceId),
 	})
 
 	if !d.IsNewResource() && tfawserr.ErrMessageContains(err, connect.ErrCodeResourceNotFoundException, "") {
@@ -121,7 +121,7 @@ func resourceUserHierarchyGroupRead(ctx context.Context, d *schema.ResourceData,
 
 	d.Set("arn", resp.HierarchyGroup.Arn)
 	d.Set("hierarchy_group_id", resp.HierarchyGroup.Id)
-	d.Set("instance_id", instanceID)
+	d.Set("instance_id", instanceId)
 	d.Set("name", resp.HierarchyGroup.Name)
 	d.Set("hierarchy_path", resp.HierarchyGroup.HierarchyPath)
 
@@ -173,17 +173,17 @@ func resourceUserHierarchyGroupUpdate(ctx context.Context, d *schema.ResourceDat
 func resourceUserHierarchyGroupDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	conn := meta.(*conns.AWSClient).ConnectConn
 
-	instanceID, hierarchyGroupId, err := UserHierarchyGroupParseId(d.Id())
+	instanceId, hierarchyGroupId, err := UserHierarchyGroupParseId(d.Id())
 	
 		if err != nil {
 			return diag.FromErr(err)
 		}
-	
+
 		_, err = conn.DeleteUserHierarchyGroupWithContext(ctx, &connect.DeleteUserHierarchyGroupInput{
 			HierarchyGroupId: aws.String(hierarchyGroupId),
-			InstanceId:    aws.String(instanceID),
+			InstanceId:    aws.String(instanceId),
 		})
-	
+
 		if err != nil {
 			return diag.FromErr(fmt.Errorf("error deleting UserHierarchyGroup (%s): %w", d.Id(), err))
 		}
@@ -195,7 +195,7 @@ func UserHierarchyGroupParseId(id string) (string, string, error) {
 	parts := strings.SplitN(id, ":", 2)
 
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("unexpected format of ID (%s), expected instanceID:hierarchyGroupId", id)
+		return "", "", fmt.Errorf("unexpected format of ID (%s), expected instanceId:hierarchyGroupId", id)
 	}
 
 	return parts[0], parts[1], nil

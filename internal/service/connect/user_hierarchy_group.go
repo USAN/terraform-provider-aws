@@ -154,6 +154,10 @@ func resourceUserHierarchyGroupUpdate(ctx context.Context, d *schema.ResourceDat
 		Name:             aws.String(d.Get("name").(string)),
 	}
 
+	if d.HasChange("hierarchy_group_id") {
+		input.HierarchyGroupId = aws.String(d.Get("hierarchy_group_id").(string))
+	}
+
 	_, err = conn.UpdateUserHierarchyGroupNameWithContext(ctx, input)
 
 	if err != nil {

@@ -105,3 +105,46 @@ func FindLambdaFunctionAssociationByArnWithContext(ctx context.Context, conn *co
 
 	return result, nil
 }
+
+func FindInstanceStorageAssociationByTypeWithContext(ctx context.Context, conn *connect.Connect, instanceID string, resourceType string) (*connect.InstanceStorageConfig, error) {
+	var result *connect.InstanceStorageConfig
+
+	input := &connect.ListInstanceStorageConfigsInput{
+		InstanceId: aws.String(instanceID),
+		MaxResults: aws.Int64(ListInstanceStorageConfigsMaxResults),
+		ResourceType: aws.String(resourceType),
+	}
+
+	err := conn.ListInstanceStorageConfigsPagesWithContext(ctx, input, func(page *connect.ListInstanceStorageConfigsOutput, lastPage bool) bool {
+		if page == nil {
+			return !lastPage
+		}
+
+		for _, cf := range page.StorageConfigs{
+			if cf == nil {
+				continue
+			}
+			result = cf
+			return false
+		}
+
+		return !lastPage
+	})
+
+	if tfawserr.ErrCodeEquals(err, connect.ErrCodeResourceNotFoundException) {
+		return nil, &resource.NotFoundError{
+			LastError:   err,
+			LastRequest: input,
+		}
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	if result == nil {
+		return nil, tfresource.NewEmptyResultError(input)
+	}
+
+	return result, nil
+}

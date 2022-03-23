@@ -1113,6 +1113,7 @@ func Provider() *schema.Provider {
 			"aws_connect_user_hierarchy_group":        connect.ResourceUserHierarchyGroup(),
 			"aws_connect_agent_status":                connect.ResourceAgentStatus(),
 			"aws_connect_user":                        connect.ResourceUsers(),
+			"aws_connect_instance_storage_association":connect.ResourceInstanceStorageConfigAssociation(),
 
 
 			"aws_cur_report_definition": cur.ResourceReportDefinition(),

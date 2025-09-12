@@ -6,16 +6,22 @@ import (
 	"log"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/connect"
-	"github.com/hashicorp/aws-sdk-go-base/v2/awsv1shim/v2/tfawserr"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/connect"
+	awstypes "github.com/aws/aws-sdk-go-v2/service/connect/types"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/hashicorp/terraform-provider-aws/internal/conns"
+	"github.com/hashicorp/terraform-provider-aws/internal/enum"
+	"github.com/hashicorp/terraform-provider-aws/internal/errs/sdkdiag"
 	tftags "github.com/hashicorp/terraform-provider-aws/internal/tags"
+	"github.com/hashicorp/terraform-provider-aws/internal/tfresource"
+	"github.com/hashicorp/terraform-provider-aws/names"
 )
 
+// @SDKResource("aws_connect_agent_status", name="Agent Status")
+// @Tags(identifierAttribute="arn")
 func ResourceAgentStatus() *schema.Resource {
 	log.Printf("[KEEGAN] agent_status.go")
 	return &schema.Resource{
@@ -29,11 +35,11 @@ func ResourceAgentStatus() *schema.Resource {
 			StateContext: schema.ImportStatePassthroughContext,
 		},
 		Schema: map[string]*schema.Schema{
-			"arn": {
+			names.AttrARN: {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"description": {
+			names.AttrDescription: {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ValidateFunc: validation.StringLenBetween(1, 250),
@@ -42,162 +48,126 @@ func ResourceAgentStatus() *schema.Resource {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"instance_id": {
+			names.AttrInstanceID: {
 				Type:     schema.TypeString,
 				Required: true,
 			},
-			"name": {
+			names.AttrName: {
 				Type:         schema.TypeString,
 				Required:     true,
 				ValidateFunc: validation.StringLenBetween(1, 127),
 			},
-			"state": {
-				Type:         schema.TypeString,
-				Required:     true,
-				ValidateFunc: validation.StringInSlice([]string{"ENABLED", "DISABLED"}, false),
+			names.AttrState: {
+				Type:             schema.TypeString,
+				Required:         true,
+				ValidateDiagFunc: enum.Validate[awstypes.AgentStatusState](),
 			},
-			"tags":     tftags.TagsSchema(),
-			"tags_all": tftags.TagsSchemaComputed(),
+			names.AttrTags:    tftags.TagsSchema(),
+			names.AttrTagsAll: tftags.TagsSchemaComputed(),
 		},
 	}
 }
 
 func resourceAgentStatusCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	conn := meta.(*conns.AWSClient).ConnectConn
-	defaultTagsConfig := meta.(*conns.AWSClient).DefaultTagsConfig
-	tags := defaultTagsConfig.MergeTags(tftags.New(d.Get("tags").(map[string]interface{})))
+	var diags diag.Diagnostics
+	conn := meta.(*conns.AWSClient).ConnectClient(ctx)
 
-	instanceID := d.Get("instance_id").(string)
-	name := d.Get("name").(string)
-
+	instanceID := d.Get(names.AttrInstanceID).(string)
+	name := d.Get(names.AttrName).(string)
 	input := &connect.CreateAgentStatusInput{
 		InstanceId: aws.String(instanceID),
 		Name:       aws.String(name),
-		State:      aws.String(d.Get("state").(string)),
+		State:      awstypes.AgentStatusState(d.Get(names.AttrState).(string)),
+		Tags:       getTagsIn(ctx),
 	}
 
-	if v, ok := d.GetOk("description"); ok {
+	if v, ok := d.GetOk(names.AttrDescription); ok {
 		input.Description = aws.String(v.(string))
 	}
 
-	if len(tags) > 0 {
-		input.Tags = Tags(tags.IgnoreAWS())
-	}
-
-	log.Printf("[DEBUG] Creating Connect Agent Status %s", input)
-	output, err := conn.CreateAgentStatusWithContext(ctx, input)
+	output, err := conn.CreateAgentStatus(ctx, input)
 
 	if err != nil {
-		return diag.FromErr(fmt.Errorf("error creating Connect Agent Status (%s): %w", name, err))
+		return sdkdiag.AppendFromErr(diags, fmt.Errorf("error creating Connect Agent Status (%s): %s", name, err))
 	}
 
 	if output == nil {
-		return diag.FromErr(fmt.Errorf("error creating Connect Agent Status (%s): empty output", name))
+		return sdkdiag.AppendFromErr(diags, fmt.Errorf("error creating Connect Agent Status (%s): empty output", name))
 	}
 
-	d.SetId(fmt.Sprintf("%s:%s", instanceID, aws.StringValue(output.AgentStatusId)))
+	d.SetId(fmt.Sprintf("%s:%s", instanceID, aws.ToString(output.AgentStatusId)))
 
-	return resourceAgentStatusRead(ctx, d, meta)
+	return append(diags, resourceAgentStatusRead(ctx, d, meta)...)
 }
 
 func resourceAgentStatusRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	conn := meta.(*conns.AWSClient).ConnectConn
-	defaultTagsConfig := meta.(*conns.AWSClient).DefaultTagsConfig
-	ignoreTagsConfig := meta.(*conns.AWSClient).IgnoreTagsConfig
+	var diags diag.Diagnostics
+	conn := meta.(*conns.AWSClient).ConnectClient(ctx)
 
 	instanceID, agentStatusID, err := AgentStatusParseID(d.Id())
 
 	if err != nil {
-		return diag.FromErr(err)
+		return sdkdiag.AppendFromErr(diags, err)
 	}
 
-	resp, err := conn.DescribeAgentStatusWithContext(ctx, &connect.DescribeAgentStatusInput{
+	resp, err := conn.DescribeAgentStatus(ctx, &connect.DescribeAgentStatusInput{
 		AgentStatusId: aws.String(agentStatusID),
 		InstanceId:    aws.String(instanceID),
 	})
 
-	if !d.IsNewResource() && tfawserr.ErrMessageContains(err, connect.ErrCodeResourceNotFoundException, "") {
+	if !d.IsNewResource() && tfresource.NotFound(err) {
 		log.Printf("[WARN] Connect Agent Status (%s) not found, removing from state", d.Id())
 		d.SetId("")
-		return nil
+		return diags
 	}
 
 	if err != nil {
-		return diag.FromErr(fmt.Errorf("error getting Connect Agent Status (%s): %w", d.Id(), err))
+		return sdkdiag.AppendFromErr(diags, fmt.Errorf("error getting Connect Agent Status (%s): %s", d.Id(), err))
 	}
 
 	if resp == nil || resp.AgentStatus == nil {
-		return diag.FromErr(fmt.Errorf("error getting Connect Agent Status (%s): empty response", d.Id()))
+		return sdkdiag.AppendFromErr(diags, fmt.Errorf("error getting Connect Agent Status (%s): empty response", d.Id()))
 	}
 
-
-	d.Set("arn", resp.AgentStatus.AgentStatusARN)
-	d.Set("agent_status_arn", resp.AgentStatus.AgentStatusARN) // Deprecated
+	d.Set(names.AttrARN, resp.AgentStatus.AgentStatusARN)
 	d.Set("agent_status_id", resp.AgentStatus.AgentStatusId)
-	d.Set("instance_id", instanceID)
-	d.Set("description", resp.AgentStatus.Description)
-	d.Set("name", resp.AgentStatus.Name)
-	d.Set("state", resp.AgentStatus.State)
+	d.Set(names.AttrInstanceID, instanceID)
+	d.Set(names.AttrDescription, resp.AgentStatus.Description)
+	d.Set(names.AttrName, resp.AgentStatus.Name)
+	d.Set(names.AttrState, resp.AgentStatus.State)
 	d.Set("type", resp.AgentStatus.Type)
 
-	tags := KeyValueTags(resp.AgentStatus.Tags).IgnoreAWS().IgnoreConfig(ignoreTagsConfig)
+	setTagsOut(ctx, resp.AgentStatus.Tags)
 
-	//lintignore:AWSR002
-	if err := d.Set("tags", tags.RemoveDefaultConfig(defaultTagsConfig).Map()); err != nil {
-		return diag.FromErr(fmt.Errorf("error setting tags: %w", err))
-	}
-
-	if err := d.Set("tags_all", tags.Map()); err != nil {
-		return diag.FromErr(fmt.Errorf("error setting tags_all: %w", err))
-	}
-
-	return nil
+	return diags
 }
 
 func resourceAgentStatusUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	conn := meta.(*conns.AWSClient).ConnectConn
+	var diags diag.Diagnostics
+	conn := meta.(*conns.AWSClient).ConnectClient(ctx)
 
 	instanceID, agentStatusID, err := AgentStatusParseID(d.Id())
-
 	if err != nil {
-		return diag.FromErr(err)
+		return sdkdiag.AppendFromErr(diags, err)
 	}
 
-	input := &connect.UpdateAgentStatusInput{
-		AgentStatusId: aws.String(agentStatusID),
-		InstanceId:    aws.String(instanceID),
-	}
+	if d.HasChanges(names.AttrName, names.AttrDescription, names.AttrState) {
+		input := &connect.UpdateAgentStatusInput{
+			AgentStatusId: aws.String(agentStatusID),
+			InstanceId:    aws.String(instanceID),
+			Name:          aws.String(d.Get(names.AttrName).(string)),
+			Description:   aws.String(d.Get(names.AttrDescription).(string)),
+			State:         awstypes.AgentStatusState(d.Get(names.AttrState).(string)),
+		}
 
-	if d.HasChange("name") {
-		input.Name = aws.String(d.Get("name").(string))
-	}
+		_, err = conn.UpdateAgentStatus(ctx, input)
 
-	if d.HasChange("description") {
-		input.Description = aws.String(d.Get("description").(string))
-	}
-
-	if d.HasChange("state") {
-		input.State = aws.String(d.Get("state").(string))
-	}
-
-	if d.HasChange("type") {
-		input.State = aws.String(d.Get("type").(string))
-	}
-
-	_, err = conn.UpdateAgentStatusWithContext(ctx, input)
-
-	if err != nil {
-		return diag.FromErr(fmt.Errorf("[ERROR] Error updating Agent Status (%s): %w", d.Id(), err))
-	}
-
-	if d.HasChange("tags_all") {
-		o, n := d.GetChange("tags_all")
-		if err := UpdateTags(conn, d.Id(), o, n); err != nil {
-			return diag.FromErr(fmt.Errorf("error updating tags: %w", err))
+		if err != nil {
+			return sdkdiag.AppendErrorf(diags, "[ERROR] Error updating Agent Status (%s): %s", d.Id(), err)
 		}
 	}
 
-	return resourceAgentStatusRead(ctx, d, meta)
+	return append(diags, resourceAgentStatusRead(ctx, d, meta)...)
 }
 
 func AgentStatusParseID(id string) (string, string, error) {
